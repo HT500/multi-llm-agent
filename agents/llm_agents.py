@@ -95,11 +95,19 @@ class LLMAgent:
             else:
                 raise ValueError(f"Unknown provider: {provider}")
             
+            # 実際にtemperatureが使用されたかどうかを判定
+            model_lower = model.lower()
+            # responses.create()を使用する場合、またはtemperatureが固定のモデルの場合はNone
+            is_temperature_used = not (
+                (reasoning_effort or ('gpt-5.2' in model_lower and 'mini' not in model_lower)) or  # responses.create()使用
+                ('gpt-5' in model_lower or 'o1' in model_lower)  # temperature固定モデル
+            )
+            
             return {
                 'provider': provider,
                 'model': model,
                 'response': response_text,
-                'temperature': temperature,
+                'temperature': temperature if is_temperature_used else None,  # 使用されていない場合はNone
                 'perspective': perspective,
                 'reasoning_effort': reasoning_effort,
                 'label': label or f"{provider}/{model}",

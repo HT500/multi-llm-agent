@@ -222,11 +222,16 @@ class OpenAIClient:
         Returns:
             生成されたテキスト
         """
-        # GPT-5.2系モデルかどうかを判定
-        is_gpt52 = 'gpt-5' in model.lower() or 'gpt-5.2' in model.lower()
+        model_lower = model.lower()
         
-        # reasoning_effortが指定されている、またはGPT-5.2系の場合はresponses.create()を使用
-        if reasoning_effort or is_gpt52:
+        # GPT-5.2系モデル（responses.create()を使用）の判定
+        # gpt-5.2-pro, gpt-5.2 など（gpt-5-miniは除外）
+        is_gpt52_responses = (
+            'gpt-5.2' in model_lower and 'mini' not in model_lower
+        )
+        
+        # reasoning_effortが指定されている、またはGPT-5.2系（mini以外）の場合はresponses.create()を使用
+        if reasoning_effort or is_gpt52_responses:
             try:
                 # messagesをinput文字列に変換
                 input_text = self._messages_to_input(messages)
@@ -241,15 +246,8 @@ class OpenAIClient:
                 if reasoning_effort:
                     params['reasoning'] = {'effort': reasoning_effort}
                 
-                # temperatureはresponses.create()でも使用可能か確認
-                # （サポートされていない場合は無視）
-                try:
-                    params['temperature'] = temperature
-                except:
-                    pass
-                
-                # max_completion_tokensを使用（responses.create()ではmax_tokensではなくmax_completion_tokens）
-                params['max_completion_tokens'] = max_tokens
+                # temperatureはresponses.create()では使用しない（GPT-5系ではサポートされていない）
+                # max_completion_tokensもresponses.create()ではサポートされていないため指定しない
                 
                 response = self.client.responses.create(**params)
                 return response.output_text
@@ -260,19 +258,25 @@ class OpenAIClient:
                 # （reasoning_effortは無視）
         
         # 通常のchat.completions.create()を使用
+        # gpt-5系やo1系など、temperatureが1固定のモデルの判定
+        is_temperature_fixed = 'gpt-5' in model_lower or 'o1' in model_lower
+        
         try:
             params = {
                 'model': model,
                 'messages': messages,
-                'temperature': temperature,
             }
+            
+            if not is_temperature_fixed:
+                # temperatureが固定でないモデルのみtemperatureを設定
+                params['temperature'] = temperature
             
             # まず通常のmax_tokensで試行
             params['max_tokens'] = max_tokens
             response = self.client.chat.completions.create(**params)
             return response.choices[0].message.content
         except openai.BadRequestError as e:
-            # max_tokensがサポートされていない場合（GPT-5.2など）
+            # max_tokensがサポートされていない場合
             error_str = str(e)
             if "max_tokens" in error_str and "max_completion_tokens" in error_str:
                 logger.info(f"Model {model} requires max_completion_tokens, retrying...")
@@ -281,9 +285,13 @@ class OpenAIClient:
                     params = {
                         'model': model,
                         'messages': messages,
-                        'temperature': temperature,
                         'max_completion_tokens': max_tokens
                     }
+                    
+                    # temperatureの処理（固定モデルでない場合のみ）
+                    if not is_temperature_fixed:
+                        params['temperature'] = temperature
+                    
                     response = self.client.chat.completions.create(**params)
                     return response.choices[0].message.content
                 except Exception as retry_e:

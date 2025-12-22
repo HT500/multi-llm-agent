@@ -17,13 +17,16 @@ def format_response(response_dict: dict) -> str:
     label = response_dict.get('label', f"{response_dict.get('provider', 'unknown')}/{response_dict.get('model', 'unknown')}")
     model = response_dict.get('model', 'unknown')
     reasoning_effort = response_dict.get('reasoning_effort')
-    temperature = response_dict.get('temperature', 0.7)
+    temperature = response_dict.get('temperature')  # Noneの可能性がある
     
     header = f"### {label}\n\n"
     info = f"- **モデル**: `{model}`\n"
     if reasoning_effort:
         info += f"- **reasoning.effort**: `{reasoning_effort}`\n"
-    info += f"- **temperature**: `{temperature}`\n\n"
+    # temperatureがNoneの場合は表示しない（使用されていない場合）
+    if temperature is not None:
+        info += f"- **temperature**: `{temperature}`\n"
+    info += "\n"
     
     if response_dict.get('success'):
         content = response_dict.get('response', '')
@@ -125,8 +128,20 @@ def main():
         # Markdown形式に変換
         markdown = generate_markdown(result, query)
         
+        # 質問の一部をファイル名に含める（安全な文字のみ）
+        query_safe = "".join(c for c in query[:30] if c.isalnum() or c in (' ', '-', '_')).strip()
+        query_safe = query_safe.replace(' ', '_')
+        # 空の場合はデフォルト名を使用
+        if not query_safe:
+            query_safe = "query"
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = project_root / "responses" / f"gpt_only_{query_safe}_{timestamp}.md"
+        
+        # ディレクトリが存在しない場合は作成
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
         # ファイルに保存
-        output_file = project_root / "examples" / "gpt_only_examples.md"
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(markdown)
         
