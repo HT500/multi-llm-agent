@@ -82,6 +82,9 @@ class SimilarityCalculator:
             # 距離行列に変換（1 - 類似度）
             distance_matrix = 1 - similarity_matrix
             
+            # 負の値を0にクリップ（数値誤差対策）
+            distance_matrix = np.clip(distance_matrix, 0, None)
+            
             # DBSCANでクラスタリング
             # eps: 距離閾値、min_samples: 最小サンプル数
             clustering = DBSCAN(eps=1 - similarity_threshold, min_samples=1, metric='precomputed')

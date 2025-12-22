@@ -1,10 +1,11 @@
 """調査エージェント - 論文/DB/アプリ検索、繰り返し制御"""
 import logging
+import re
 from typing import List, Dict, Optional
 import arxiv
 import requests
 from config.settings import (
-    COVERAGE_THRESHOLD, MAX_RESEARCH_ITERATIONS, RESEARCH_CONFIG
+    COVERAGE_THRESHOLD, MAX_RESEARCH_ITERATIONS, RESEARCH_CONFIG, LLM_CONFIG
 )
 from utils.coverage_evaluator import CoverageEvaluator
 
@@ -17,6 +18,56 @@ class ResearchAgent:
     def __init__(self):
         self.coverage_evaluator = CoverageEvaluator()
         self.research_history = []  # 調査履歴
+        self.llm_client = None
+        self._init_llm_for_translation()
+    
+    def _init_llm_for_translation(self):
+        """翻訳用のLLMクライアントを初期化"""
+        try:
+            if LLM_CONFIG['openai']['enabled'] and LLM_CONFIG['openai']['api_key']:
+                from utils.api_clients import OpenAIClient
+                self.llm_client = OpenAIClient(LLM_CONFIG['openai']['api_key'])
+        except Exception as e:
+            logger.warning(f"Failed to initialize LLM for translation: {e}")
+    
+    def _is_japanese(self, text: str) -> bool:
+        """テキストが日本語を含むかチェック"""
+        return bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text))
+    
+    def _extract_english_keywords(self, query: str) -> str:
+        """日本語クエリから英語キーワードを抽出"""
+        if not self._is_japanese(query):
+            return query
+        
+        if not self.llm_client:
+            logger.warning("LLM client not available for translation, using original query")
+            return query
+        
+        try:
+            # LLMを使って英語キーワードを抽出
+            prompt = f"""Extract key English search terms from the following Japanese research question. 
+Return only the most important English keywords separated by spaces, suitable for academic paper search (arXiv, PubMed).
+
+Japanese question: {query}
+
+English keywords:"""
+            
+            messages = [
+                {'role': 'system', 'content': 'You are a helpful assistant that extracts English keywords from Japanese research questions for academic paper searches.'},
+                {'role': 'user', 'content': prompt}
+            ]
+            
+            # GPT-4またはGPT-3.5-turboを使用（GPT-5.2はエラーになる可能性があるため）
+            model = 'gpt-4' if 'gpt-4' in LLM_CONFIG['openai']['models'] else LLM_CONFIG['openai']['models'][0]
+            keywords = self.llm_client.generate(model, messages, temperature=0.3, max_tokens=100)
+            
+            # キーワードをクリーンアップ
+            keywords = keywords.strip().replace('\n', ' ').replace(',', ' ')
+            logger.info(f"Translated query: '{query}' -> '{keywords}'")
+            return keywords
+        except Exception as e:
+            logger.warning(f"Failed to extract English keywords: {e}, using original query")
+            return query
     
     def search_papers(self, query: str, max_results: int = 10) -> List[Dict]:
         """
@@ -31,10 +82,13 @@ class ResearchAgent:
         """
         results = []
         
+        # 日本語クエリの場合は英語キーワードに変換
+        search_query = self._extract_english_keywords(query)
+        
         # arXiv検索
         try:
             search = arxiv.Search(
-                query=query,
+                query=search_query,
                 max_results=max_results,
                 sort_by=arxiv.SortCriterion.Relevance
             )
@@ -159,7 +213,7 @@ class ResearchAgent:
         
         max_results = RESEARCH_CONFIG.get('max_results_per_source', 10)
         
-        # 論文検索
+        # 論文検索（日本語クエリは自動的に英語キーワードに変換される）
         if RESEARCH_CONFIG['sources']['papers']['enabled']:
             try:
                 papers = self.search_papers(query, max_results)

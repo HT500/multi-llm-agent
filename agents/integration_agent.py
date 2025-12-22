@@ -1,5 +1,6 @@
 """統合エージェント - ハイブリッド統合方式"""
 import logging
+import re
 from typing import List, Dict, Optional
 import numpy as np
 
@@ -190,7 +191,11 @@ class IntegrationAgent:
             return {'integrated_response': '', 'method': 'meta_llm', 'confidence': 0.0}
         
         # メタLLMに統合を依頼
-        prompt = f"""以下の複数のLLMからの回答を統合して、最も正確で包括的な回答を作成してください。
+        # 回答が日本語かどうかを判定
+        is_japanese = any(bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', text)) for text in response_texts[:3])
+        language_instruction = "日本語で回答してください。" if is_japanese else "Please respond in the same language as the responses."
+        
+        prompt = f"""以下の複数のLLMからの回答を統合して、最も正確で包括的な回答を{language_instruction}
 
 回答1:
 {response_texts[0] if len(response_texts) > 0 else ''}
@@ -201,12 +206,13 @@ class IntegrationAgent:
 回答3:
 {response_texts[2] if len(response_texts) > 2 else ''}
 
-これらの回答を統合し、一貫性があり、正確で、包括的な最終回答を提供してください。"""
+これらの回答を統合し、一貫性があり、正確で、包括的な最終回答を{language_instruction}"""
         
         try:
             meta_model = INTEGRATION_CONFIG.get('meta_llm', 'gpt-4')
+            system_prompt = f'You are an expert at integrating multiple AI responses into a coherent, accurate, and comprehensive answer. {language_instruction}'
             messages = [
-                {'role': 'system', 'content': 'You are an expert at integrating multiple AI responses into a coherent, accurate, and comprehensive answer.'},
+                {'role': 'system', 'content': system_prompt},
                 {'role': 'user', 'content': prompt}
             ]
             

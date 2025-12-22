@@ -193,6 +193,7 @@ class OpenAIClient:
             生成されたテキスト
         """
         try:
+            # まず通常のmax_tokensで試行
             response = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -200,6 +201,25 @@ class OpenAIClient:
                 max_tokens=max_tokens
             )
             return response.choices[0].message.content
+        except openai.BadRequestError as e:
+            # max_tokensがサポートされていない場合（GPT-5.2など）
+            error_str = str(e)
+            if "max_tokens" in error_str and "max_completion_tokens" in error_str:
+                logger.info(f"Model {model} requires max_completion_tokens, retrying...")
+                try:
+                    response = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_completion_tokens=max_tokens  # max_completion_tokensを使用
+                    )
+                    return response.choices[0].message.content
+                except Exception as retry_e:
+                    logger.error(f"OpenAI API error (retry): {retry_e}")
+                    raise
+            else:
+                logger.error(f"OpenAI API error: {e}")
+                raise
         except openai.RateLimitError as e:
             logger.error(f"Rate limit exceeded: {e}")
             raise

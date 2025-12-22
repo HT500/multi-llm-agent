@@ -207,12 +207,22 @@ class LLMAgent:
         Returns:
             回答のリスト
         """
+        # 日本語で回答するかどうかを判定
+        import re
+        is_japanese = bool(re.search(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]', query))
+        language_instruction = "Please respond in Japanese (日本語で回答してください)." if is_japanese else "Please respond in the same language as the question."
+        
         # メッセージを構築
         messages = []
         if context:
             messages.append({
                 'role': 'system',
-                'content': f"You are a helpful assistant. Use the following research context to answer the user's question accurately and comprehensively.\n\n{context}"
+                'content': f"You are a helpful assistant. {language_instruction} Use the following research context to answer the user's question accurately and comprehensively.\n\n{context}"
+            })
+        else:
+            messages.append({
+                'role': 'system',
+                'content': f"You are a helpful assistant. {language_instruction}"
             })
         messages.append({
             'role': 'user',
