@@ -41,3 +41,7 @@ wheels/
 .DS_Store
 Thumbs.db
 
+# 出力ファイル（実行結果）
+examples/
+responses/
+
