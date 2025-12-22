@@ -53,7 +53,8 @@ class LLMAgent:
                 logger.error(f"Failed to initialize local LLM client: {e}")
     
     def _generate_single_response(self, provider: str, model: str, messages: List[Dict], 
-                                  temperature: float = 0.7, perspective: Optional[str] = None) -> Dict:
+                                  temperature: float = 0.7, perspective: Optional[str] = None,
+                                  reasoning_effort: Optional[str] = None, label: Optional[str] = None) -> Dict:
         """
         単一の回答を生成
         
@@ -63,6 +64,8 @@ class LLMAgent:
             messages: メッセージリスト
             temperature: 温度パラメータ
             perspective: 視点（保守的、革新的、実用的など）
+            reasoning_effort: 推論努力レベル ('none', 'low', 'medium', 'high', 'xhigh')
+            label: 出力ラベル（表示用）
             
         Returns:
             回答情報の辞書
@@ -79,7 +82,7 @@ class LLMAgent:
             client = self.clients[provider]
             
             if provider == 'openai':
-                response_text = client.generate(model, messages, temperature)
+                response_text = client.generate(model, messages, temperature, reasoning_effort=reasoning_effort)
             elif provider == 'gemini':
                 # Gemini用にメッセージをプロンプトに変換
                 prompt = self._messages_to_prompt(messages)
@@ -98,6 +101,8 @@ class LLMAgent:
                 'response': response_text,
                 'temperature': temperature,
                 'perspective': perspective,
+                'reasoning_effort': reasoning_effort,
+                'label': label or f"{provider}/{model}",
                 'success': True
             }
         except Exception as e:
@@ -107,6 +112,7 @@ class LLMAgent:
                 'model': model,
                 'response': None,
                 'error': str(e),
+                'label': label or f"{provider}/{model}",
                 'success': False
             }
     
@@ -159,7 +165,52 @@ class LLMAgent:
         strategy = LLM_CONFIG['openai'].get('multi_response_strategy', 'multi_model')
         strategies = []
         
-        if strategy == 'multi_model':
+        if strategy == 'gpt_variants':
+            # GPTバリエーション戦略（モデル + reasoning.effortの組み合わせ）
+            variants_str = LLM_CONFIG['openai'].get('gpt_variants', 'gpt-5.2-pro:high,gpt-5.2:medium,gpt-5-mini:medium')
+            variants = [v.strip() for v in variants_str.split(',')]
+            
+            for variant in variants:
+                if ':' in variant:
+                    model, effort = variant.split(':', 1)
+                    model = model.strip()
+                    effort = effort.strip()
+                    
+                    # ラベルを生成
+                    effort_labels = {
+                        'none': 'なし',
+                        'low': '低',
+                        'medium': '標準',
+                        'high': '高',
+                        'xhigh': '最高'
+                    }
+                    effort_label = effort_labels.get(effort, effort)
+                    
+                    if 'pro' in model.lower():
+                        label = f"GPT-{model.split('-')[-1] if '-' in model else model} Pro + Thinking{effort_label}"
+                    else:
+                        label = f"GPT-{model.split('-')[-1] if '-' in model else model} + Thinking{effort_label}"
+                    
+                    strategies.append({
+                        'provider': 'openai',
+                        'model': model,
+                        'temperature': 0.7,
+                        'reasoning_effort': effort,
+                        'perspective': None,
+                        'label': label
+                    })
+                else:
+                    # reasoning.effortが指定されていない場合はmediumをデフォルト
+                    strategies.append({
+                        'provider': 'openai',
+                        'model': variant.strip(),
+                        'temperature': 0.7,
+                        'reasoning_effort': 'medium',
+                        'perspective': None,
+                        'label': f"GPT-{variant.strip()}"
+                    })
+        
+        elif strategy == 'multi_model':
             # 異なるモデルを使用
             models = LLM_CONFIG['openai']['models']
             for model in models[:3]:  # 最大3つ
@@ -167,6 +218,7 @@ class LLMAgent:
                     'provider': 'openai',
                     'model': model,
                     'temperature': 0.7,
+                    'reasoning_effort': None,
                     'perspective': None
                 })
         
@@ -179,6 +231,7 @@ class LLMAgent:
                     'provider': 'openai',
                     'model': model,
                     'temperature': temp,
+                    'reasoning_effort': None,
                     'perspective': None
                 })
         
@@ -191,6 +244,7 @@ class LLMAgent:
                     'provider': 'openai',
                     'model': model,
                     'temperature': 0.7,
+                    'reasoning_effort': None,
                     'perspective': perspective
                 })
         
@@ -293,7 +347,9 @@ class LLMAgent:
                     strategy['model'],
                     messages.copy(),
                     strategy['temperature'],
-                    strategy.get('perspective')
+                    strategy.get('perspective'),
+                    strategy.get('reasoning_effort'),
+                    strategy.get('label')
                 )
                 futures[future] = strategy
             

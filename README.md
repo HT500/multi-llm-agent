@@ -78,6 +78,23 @@ python main.py "質問" --output result.json
 python main.py "質問" --verbose
 ```
 
+### 出力例の生成（GPTバリエーション）
+
+GPTバリエーション戦略で実行し、各モデルの個別出力と統合結果をMarkdown形式で保存：
+
+```bash
+# .envでOPENAI_MULTI_RESPONSE_STRATEGY=gpt_variantsを設定後
+python scripts/generate_examples.py "質問内容"
+```
+
+または、対話的に質問を入力：
+
+```bash
+python scripts/generate_examples.py
+```
+
+結果は`examples/gpt_only_examples.md`に保存されます。
+
 ### Pythonコードから使用
 
 ```python
@@ -110,11 +127,36 @@ OPENAI_API_KEY=your_api_key
 OPENAI_ENABLED=true
 OPENAI_MODELS=gpt-5.2,gpt-4,gpt-3.5-turbo
 OPENAI_AUTO_DISCOVER=false
-OPENAI_MULTI_RESPONSE_STRATEGY=multi_model  # multi_model, multi_param, multi_perspective
+OPENAI_MULTI_RESPONSE_STRATEGY=multi_model  # multi_model, multi_param, multi_perspective, gpt_variants
 
 GEMINI_ENABLED=false
 CLAUDE_ENABLED=false
 ```
+
+### GPTバリエーション戦略（モデル + reasoning.effort）
+
+GPT-5.2 Proやreasoning.effortパラメータを使用する場合：
+
+```bash
+OPENAI_MULTI_RESPONSE_STRATEGY=gpt_variants
+OPENAI_GPT_VARIANTS=gpt-5.2-pro:high,gpt-5.2:medium,gpt-5-mini:medium
+```
+
+**形式**: `モデル名:reasoning.effort`をカンマ区切りで指定
+
+**reasoning.effortの値**:
+- `none`: 推論なし
+- `low`: 低
+- `medium`: 標準（デフォルト）
+- `high`: 高
+- `xhigh`: 最高
+
+**例**:
+- `gpt-5.2-pro:high` → GPT-5.2 Pro + Thinking高
+- `gpt-5.2:medium` → GPT-5.2 + Thinking標準
+- `gpt-5-mini:medium` → GPT-5 Mini + Thinking標準
+
+各バリエーションの個別出力と統合結果が生成されます。
 
 ### ローカルLLMを使用する場合
 

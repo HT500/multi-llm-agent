@@ -31,9 +31,12 @@ LLM_CONFIG = {
         'cache_duration_hours': int(os.getenv('OPENAI_CACHE_DURATION_HOURS', '24')),
         'validate_models': os.getenv('OPENAI_VALIDATE_MODELS', 'false').lower() == 'true',
         # GPTのみの場合の複数回答生成戦略
-        'multi_response_strategy': os.getenv('OPENAI_MULTI_RESPONSE_STRATEGY', 'multi_model'),  # multi_model, multi_param, multi_perspective
+        'multi_response_strategy': os.getenv('OPENAI_MULTI_RESPONSE_STRATEGY', 'multi_model'),  # multi_model, multi_param, multi_perspective, gpt_variants
         'temperature_variations': [float(x) for x in os.getenv('OPENAI_TEMPERATURE_VARIATIONS', '0.3,0.7,1.0').split(',')],
-        'perspectives': os.getenv('OPENAI_PERSPECTIVES', 'conservative,innovative,practical').split(',')
+        'perspectives': os.getenv('OPENAI_PERSPECTIVES', 'conservative,innovative,practical').split(','),
+        # GPTバリエーション設定（モデル + reasoning.effortの組み合わせ）
+        # 形式: "model1:effort1,model2:effort2" または JSON形式
+        'gpt_variants': os.getenv('OPENAI_GPT_VARIANTS', 'gpt-5.2-pro:high,gpt-5.2:medium,gpt-5-mini:medium')
     },
     'gemini': {
         'enabled': os.getenv('GEMINI_ENABLED', 'false').lower() == 'true',

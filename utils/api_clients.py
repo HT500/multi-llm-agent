@@ -179,7 +179,36 @@ class OpenAIClient:
         self.client = openai.OpenAI(api_key=api_key)
         self.api_key = api_key
     
-    def generate(self, model: str, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000) -> str:
+    def _messages_to_input(self, messages: List[Dict]) -> str:
+        """
+        messagesリストをinput文字列に変換（responses.create()用）
+        
+        Args:
+            messages: メッセージリスト
+            
+        Returns:
+            input文字列
+        """
+        # systemメッセージとuserメッセージを結合
+        parts = []
+        for msg in messages:
+            role = msg.get('role', 'user')
+            content = msg.get('content', '')
+            if role == 'system':
+                parts.append(f"System: {content}")
+            elif role == 'user':
+                parts.append(content)
+            elif role == 'assistant':
+                parts.append(f"Assistant: {content}")
+        
+        # 最後のuserメッセージが主要なinputになる
+        # または、すべてを結合
+        if len(parts) == 1:
+            return parts[0]
+        else:
+            return "\n\n".join(parts)
+    
+    def generate(self, model: str, messages: List[Dict], temperature: float = 0.7, max_tokens: int = 2000, reasoning_effort: Optional[str] = None) -> str:
         """
         テキスト生成
         
@@ -188,18 +217,59 @@ class OpenAIClient:
             messages: メッセージリスト
             temperature: 温度パラメータ
             max_tokens: 最大トークン数
+            reasoning_effort: 推論努力レベル ('none', 'low', 'medium', 'high', 'xhigh')
             
         Returns:
             生成されたテキスト
         """
+        # GPT-5.2系モデルかどうかを判定
+        is_gpt52 = 'gpt-5' in model.lower() or 'gpt-5.2' in model.lower()
+        
+        # reasoning_effortが指定されている、またはGPT-5.2系の場合はresponses.create()を使用
+        if reasoning_effort or is_gpt52:
+            try:
+                # messagesをinput文字列に変換
+                input_text = self._messages_to_input(messages)
+                
+                # responses.create()のパラメータを構築
+                params = {
+                    'model': model,
+                    'input': input_text,
+                }
+                
+                # reasoning_effortが指定されている場合
+                if reasoning_effort:
+                    params['reasoning'] = {'effort': reasoning_effort}
+                
+                # temperatureはresponses.create()でも使用可能か確認
+                # （サポートされていない場合は無視）
+                try:
+                    params['temperature'] = temperature
+                except:
+                    pass
+                
+                # max_completion_tokensを使用（responses.create()ではmax_tokensではなくmax_completion_tokens）
+                params['max_completion_tokens'] = max_tokens
+                
+                response = self.client.responses.create(**params)
+                return response.output_text
+                
+            except Exception as e:
+                logger.warning(f"responses.create() failed for {model}, falling back to chat.completions.create(): {e}")
+                # フォールバック: 通常のchat.completions.create()を使用
+                # （reasoning_effortは無視）
+        
+        # 通常のchat.completions.create()を使用
         try:
+            params = {
+                'model': model,
+                'messages': messages,
+                'temperature': temperature,
+            }
+            
             # まず通常のmax_tokensで試行
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
+            params['max_tokens'] = max_tokens
+            response = self.client.chat.completions.create(**params)
             return response.choices[0].message.content
         except openai.BadRequestError as e:
             # max_tokensがサポートされていない場合（GPT-5.2など）
@@ -207,12 +277,14 @@ class OpenAIClient:
             if "max_tokens" in error_str and "max_completion_tokens" in error_str:
                 logger.info(f"Model {model} requires max_completion_tokens, retrying...")
                 try:
-                    response = self.client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_completion_tokens=max_tokens  # max_completion_tokensを使用
-                    )
+                    # max_completion_tokensを使用して再試行
+                    params = {
+                        'model': model,
+                        'messages': messages,
+                        'temperature': temperature,
+                        'max_completion_tokens': max_tokens
+                    }
+                    response = self.client.chat.completions.create(**params)
                     return response.choices[0].message.content
                 except Exception as retry_e:
                     logger.error(f"OpenAI API error (retry): {retry_e}")
