@@ -55,6 +55,10 @@ MAX_RESEARCH_ITERATIONS=5
 
 # 統合方式: voting, weighted, meta_llm, consensus, hybrid
 INTEGRATION_METHOD=hybrid
+
+# メタLLM設定（統合に使用するLLM）
+META_LLM_PROVIDER=openai  # openai, claude, gemini
+META_LLM_MODEL=gpt-5.2  # または gpt-5.2-pro, claude-3-opus-20240229, gemini-3-pro-preview
 ```
 
 ## 使用方法
@@ -93,7 +97,7 @@ python scripts/run_query.py "質問内容"
 python scripts/run_query.py
 ```
 
-結果は`responses/gpt_only_質問の一部_タイムスタンプ.md`に保存されます。
+結果は`responses/response_質問の一部_タイムスタンプ.md`に保存されます。
 
 ### Pythonコードから使用
 
@@ -112,7 +116,7 @@ result = agent.query(
 
 # 結果を表示
 print(result['answer'])
-print(f"統合方式: {result['method']}")
+print(f"統合方式: {result['method']}")  # メタLLM使用時は "meta_llm (GPT: gpt-5.2)" のように表示
 print(f"信頼度: {result['confidence']}")
 ```
 
@@ -198,6 +202,7 @@ LOCAL_LLM_MODELS=llama3:8b,mistral:7b,phi3:mini
    - ハイブリッド統合方式
    - 類似度分析、信頼度スコアリング
    - 重み付け統合、メタLLM統合、合意形成
+   - メタLLMは`.env`でプロバイダー（OpenAI/Claude/Gemini）とモデルを設定可能
 
 ### システムフロー
 
