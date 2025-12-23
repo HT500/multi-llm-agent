@@ -84,16 +84,16 @@ GPTバリエーション戦略で実行し、各モデルの個別出力と統�
 
 ```bash
 # .envでOPENAI_MULTI_RESPONSE_STRATEGY=gpt_variantsを設定後
-python scripts/generate_examples.py "質問内容"
+python scripts/run_query.py "質問内容"
 ```
 
 または、対話的に質問を入力：
 
 ```bash
-python scripts/generate_examples.py
+python scripts/run_query.py
 ```
 
-結果は`examples/gpt_only_examples.md`に保存されます。
+結果は`responses/gpt_only_質問の一部_タイムスタンプ.md`に保存されます。
 
 ### Pythonコードから使用
 

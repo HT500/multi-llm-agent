@@ -61,7 +61,8 @@ LOCAL_LLM_CONFIG = {
 # 統合エージェント設定
 INTEGRATION_CONFIG = {
     'method': os.getenv('INTEGRATION_METHOD', 'hybrid'),  # voting, weighted, meta_llm, consensus, hybrid
-    'meta_llm': os.getenv('META_LLM', 'gpt-4'),  # メタLLM統合に使用するモデル
+    'meta_llm_provider': os.getenv('META_LLM_PROVIDER', 'openai'),  # メタLLM統合に使用するプロバイダー (openai, claude, gemini)
+    'meta_llm_model': os.getenv('META_LLM_MODEL', 'gpt-5.2'),  # メタLLM統合に使用するモデル
     'similarity_threshold': float(os.getenv('SIMILARITY_THRESHOLD', '0.7')),  # 類似度閾値
     'consensus_threshold': float(os.getenv('CONSENSUS_THRESHOLD', '0.6'))  # 合意形成閾値
 }

@@ -6,7 +6,7 @@ import numpy as np
 
 from config.settings import INTEGRATION_CONFIG, LLM_CONFIG
 from utils.similarity import SimilarityCalculator
-from utils.api_clients import OpenAIClient
+from utils.api_clients import OpenAIClient, get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +17,42 @@ class IntegrationAgent:
     def __init__(self):
         self.similarity_calculator = SimilarityCalculator()
         self.meta_llm_client = None
+        self.meta_llm_provider = None
         self._initialize_meta_llm()
     
     def _initialize_meta_llm(self):
         """メタLLMクライアントを初期化"""
         if INTEGRATION_CONFIG.get('method') in ['meta_llm', 'hybrid']:
-            if LLM_CONFIG['openai']['enabled'] and LLM_CONFIG['openai']['api_key']:
-                try:
-                    self.meta_llm_client = OpenAIClient(LLM_CONFIG['openai']['api_key'])
-                except Exception as e:
-                    logger.warning(f"Failed to initialize meta LLM client: {e}")
+            meta_provider = INTEGRATION_CONFIG.get('meta_llm_provider', 'openai')
+            
+            try:
+                if meta_provider == 'openai':
+                    if LLM_CONFIG['openai']['enabled'] and LLM_CONFIG['openai']['api_key']:
+                        self.meta_llm_client = OpenAIClient(LLM_CONFIG['openai']['api_key'])
+                        self.meta_llm_provider = 'openai'
+                        logger.info(f"Meta LLM initialized: OpenAI")
+                    else:
+                        logger.warning("OpenAI not enabled or API key not set for meta LLM")
+                elif meta_provider == 'claude':
+                    if LLM_CONFIG['claude']['enabled'] and LLM_CONFIG['claude']['api_key']:
+                        self.meta_llm_client = get_llm_client('claude', LLM_CONFIG['claude']['api_key'])
+                        self.meta_llm_provider = 'claude'
+                        logger.info(f"Meta LLM initialized: Claude")
+                    else:
+                        logger.warning("Claude not enabled or API key not set for meta LLM")
+                elif meta_provider == 'gemini':
+                    if LLM_CONFIG['gemini']['enabled'] and LLM_CONFIG['gemini']['api_key']:
+                        self.meta_llm_client = get_llm_client('gemini', LLM_CONFIG['gemini']['api_key'])
+                        self.meta_llm_provider = 'gemini'
+                        logger.info(f"Meta LLM initialized: Gemini")
+                    else:
+                        logger.warning("Gemini not enabled or API key not set for meta LLM")
+                else:
+                    logger.warning(f"Unknown meta LLM provider: {meta_provider}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize meta LLM client: {e}")
+                self.meta_llm_client = None
+                self.meta_llm_provider = None
     
     def integrate_responses(self, responses: List[Dict]) -> Dict:
         """
@@ -209,19 +235,36 @@ class IntegrationAgent:
 これらの回答を統合し、一貫性があり、正確で、包括的な最終回答を{language_instruction}"""
         
         try:
-            meta_model = INTEGRATION_CONFIG.get('meta_llm', 'gpt-4')
-            system_prompt = f'You are an expert at integrating multiple AI responses into a coherent, accurate, and comprehensive answer. {language_instruction}'
-            messages = [
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': prompt}
-            ]
+            meta_model = INTEGRATION_CONFIG.get('meta_llm_model', 'gpt-5.2')
+            meta_provider = self.meta_llm_provider or INTEGRATION_CONFIG.get('meta_llm_provider', 'openai')
             
-            integrated_response = self.meta_llm_client.generate(meta_model, messages, temperature=0.3)
+            if meta_provider == 'openai':
+                system_prompt = f'You are an expert at integrating multiple AI responses into a coherent, accurate, and comprehensive answer. {language_instruction}'
+                messages = [
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': prompt}
+                ]
+                integrated_response = self.meta_llm_client.generate(meta_model, messages, temperature=0.3)
+            elif meta_provider == 'claude':
+                system_prompt = f'You are an expert at integrating multiple AI responses into a coherent, accurate, and comprehensive answer. {language_instruction}'
+                messages = [
+                    {'role': 'user', 'content': f"{system_prompt}\n\n{prompt}"}
+                ]
+                integrated_response = self.meta_llm_client.generate(meta_model, messages, temperature=0.3)
+            elif meta_provider == 'gemini':
+                # Gemini用にプロンプトを結合
+                full_prompt = f"""You are an expert at integrating multiple AI responses into a coherent, accurate, and comprehensive answer. {language_instruction}
+
+{prompt}"""
+                integrated_response = self.meta_llm_client.generate(meta_model, full_prompt, temperature=0.3)
+            else:
+                raise ValueError(f"Unknown meta LLM provider: {meta_provider}")
             
             return {
                 'integrated_response': integrated_response,
                 'method': 'meta_llm',
                 'confidence': 0.8,  # メタLLM統合は高い信頼度を仮定
+                'meta_provider': meta_provider,
                 'meta_model': meta_model
             }
         except Exception as e:

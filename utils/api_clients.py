@@ -367,12 +367,27 @@ class ClaudeClient:
             生成されたテキスト
         """
         try:
-            response = self.client.messages.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
+            # Claude APIではsystemメッセージをトップレベルのsystemパラメータとして渡す必要がある
+            system_message = None
+            filtered_messages = []
+            
+            for msg in messages:
+                if msg.get('role') == 'system':
+                    system_message = msg.get('content', '')
+                else:
+                    filtered_messages.append(msg)
+            
+            params = {
+                'model': model,
+                'messages': filtered_messages,
+                'temperature': temperature,
+                'max_tokens': max_tokens
+            }
+            
+            if system_message:
+                params['system'] = system_message
+            
+            response = self.client.messages.create(**params)
             return response.content[0].text
         except Exception as e:
             logger.error(f"Claude API error: {e}")

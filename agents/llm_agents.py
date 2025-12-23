@@ -32,8 +32,11 @@ class LLMAgent:
         if LLM_CONFIG['gemini']['enabled'] and LLM_CONFIG['gemini']['api_key']:
             try:
                 self.clients['gemini'] = get_llm_client('gemini', LLM_CONFIG['gemini']['api_key'])
+                logger.info(f"Gemini client initialized successfully with model: {LLM_CONFIG['gemini']['model']}")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
+        else:
+            logger.debug(f"Gemini not enabled or API key not set. enabled={LLM_CONFIG['gemini']['enabled']}, has_key={bool(LLM_CONFIG['gemini']['api_key'])}")
         
         # Claude
         if LLM_CONFIG['claude']['enabled'] and LLM_CONFIG['claude']['api_key']:
@@ -293,6 +296,7 @@ class LLMAgent:
         
         # 使用可能なプロバイダーを確認
         available_providers = list(self.clients.keys())
+        logger.info(f"Available providers: {available_providers}")
         
         # GPTのみの場合の戦略を決定
         if len(available_providers) == 1 and 'openai' in available_providers:
@@ -318,12 +322,16 @@ class LLMAgent:
             
             # Gemini
             if 'gemini' in available_providers:
+                gemini_model = LLM_CONFIG['gemini']['model']
+                logger.info(f"Adding Gemini strategy with model: {gemini_model}")
                 strategies.append({
                     'provider': 'gemini',
-                    'model': LLM_CONFIG['gemini']['model'],
+                    'model': gemini_model,
                     'temperature': 0.7,
                     'perspective': None
                 })
+            else:
+                logger.warning("Gemini not in available providers")
             
             # Claude
             if 'claude' in available_providers:

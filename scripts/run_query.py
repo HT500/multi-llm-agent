@@ -1,4 +1,4 @@
-"""出力例生成スクリプト - GPTのみ系統の実際の実行結果をMarkdown形式で保存"""
+"""クエリ実行スクリプト - マルチLLMエージェントを実行して結果をMarkdown形式で保存"""
 import sys
 import os
 from pathlib import Path
@@ -39,13 +39,51 @@ def generate_markdown(result: dict, query: str) -> str:
     """実行結果をMarkdown形式に変換"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    markdown = f"""# GPTのみ系統の出力例
+    # 使用されているプロバイダーを確認してタイトルを動的に生成
+    providers = [r.get('provider', 'unknown') for r in result.get('responses', [])]
+    unique_providers = list(set(providers))
+    
+    provider_names = {
+        'openai': 'GPT',
+        'gemini': 'Gemini',
+        'claude': 'Claude',
+        'local': 'Local LLM'
+    }
+    
+    if len(unique_providers) == 1 and 'openai' in unique_providers:
+        title = "# GPTのみ系統の出力例"
+    elif len(unique_providers) > 1:
+        provider_display = ' + '.join([provider_names.get(p, p) for p in sorted(unique_providers)])
+        title = f"# {provider_display}系統の出力例"
+    else:
+        title = "# マルチLLM統合エージェントの出力例"
+    
+    # 統合方式の表示（メタLLMの場合はモデル名も併記）
+    integration_method = result.get('method', 'unknown')
+    integration_info = result.get('integration_info', {})
+    if integration_method == 'meta_llm':
+        meta_provider = integration_info.get('meta_provider')
+        meta_model = integration_info.get('meta_model')
+        if meta_provider and meta_model:
+            provider_names = {
+                'openai': 'GPT',
+                'gemini': 'Gemini',
+                'claude': 'Claude'
+            }
+            provider_display = provider_names.get(meta_provider, meta_provider)
+            integration_method_display = f"{integration_method} ({provider_display}: {meta_model})"
+        else:
+            integration_method_display = integration_method
+    else:
+        integration_method_display = integration_method
+    
+    markdown = f"""{title}
 
 ## 実行情報
 
 - **実行日時**: {timestamp}
 - **質問**: {query}
-- **統合方式**: {result.get('method', 'unknown')}
+- **統合方式**: {integration_method_display}
 - **信頼度**: {result.get('confidence', 0.0):.2f}
 - **生成された回答数**: {len(result.get('responses', []))}
 
@@ -136,7 +174,7 @@ def main():
             query_safe = "query"
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = project_root / "responses" / f"gpt_only_{query_safe}_{timestamp}.md"
+        output_file = project_root / "responses" / f"response_{query_safe}_{timestamp}.md"
         
         # ディレクトリが存在しない場合は作成
         output_file.parent.mkdir(parents=True, exist_ok=True)
